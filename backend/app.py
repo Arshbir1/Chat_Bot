@@ -350,23 +350,20 @@ def process_audio():
     synthesized_audio_path = None
     try:
         ip_address = request.remote_addr.replace('.', '_')
-        data = request.get_json()
-        character = data.get('character', 'jax')
-        selected_language = data.get('language', 'en-US')
+        character = request.form.get('character', 'jax')
+        selected_language = request.form.get('language', 'en-US')
         
         if not selected_language:
             return jsonify({"error": "No language selected"}), 400
 
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file provided"}), 400
+
+        audio_file = request.files['audio']
         timestamp = str(time.time_ns())
-        user_input_id = f"user_input_{timestamp}"
         recorded_audio_path = f"{UPLOAD_FOLDER}/recorded_audio_{timestamp}.wav"
-        
-        print(f"Recording audio to {recorded_audio_path}...")
-        recording_successful = record_audio(recorded_audio_path, max_duration=15, silence_threshold=500, silence_duration=2.0)
-        
-        if not recording_successful:
-            return jsonify({"error": "No speech detected or recording failed"}), 400
-        
+        audio_file.save(recorded_audio_path)
+
         recorded_blob_path = f"audio/{ip_address}/recorded_audio_{timestamp}.wav"
         recorded_blob = bucket.blob(recorded_blob_path)
         recorded_blob.upload_from_filename(recorded_audio_path)
@@ -395,11 +392,11 @@ def process_audio():
         synthesized_blob.upload_from_filename(synthesized_audio_path)
         synthesized_blob.make_public()
         synthesized_audio_url = synthesized_blob.public_url
-        print(f"Uploaded synthesized audio to {synthesized_blob_path}: {synthesized_audio_url}")
+        print(f"Uploaded synthesized audio to {synthesized_blob_path}: {recorded_audio_url}")
 
         conversation_ref = db.collection(ip_address)
         conversation_ref.add({
-            'user_input_id': user_input_id,
+            'user_input_id': f"user_input_{timestamp}",
             'timestamp': firestore.SERVER_TIMESTAMP,
             'user_input': transcript,
             'response': response,
@@ -517,4 +514,5 @@ def clear_chat():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5003)
+    port = int(os.getenv("PORT", 5003))  # Default to 5003 for local development
+    app.run(debug=False, host="0.0.0.0", port=port)
