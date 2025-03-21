@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, jsonify
 import os
+import json
+from dotenv import load_dotenv
+from flask import Flask, render_template, request, jsonify
 import time
 import atexit
 import signal
-from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 from record_audio import record_audio
@@ -15,10 +16,30 @@ app = Flask(__name__)
 
 load_dotenv()
 
-firebase_credentials_path = os.getenv('FIREBASE_CREDENTIALS')
-if not firebase_credentials_path or not os.path.exists(firebase_credentials_path):
-    raise ValueError("FIREBASE_CREDENTIALS not set or file not found in .env file")
+# Load Firebase credentials from environment variable
+firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
+if not firebase_credentials_json:
+    raise ValueError("FIREBASE_CREDENTIALS_JSON not set in environment variables")
 
+# Write Firebase credentials to a temporary file
+firebase_credentials_path = "/tmp/firebase-credentials.json"
+with open(firebase_credentials_path, "w") as f:
+    f.write(firebase_credentials_json)
+
+# Load Google Cloud credentials from environment variable
+google_credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+if not google_credentials_json:
+    raise ValueError("GOOGLE_APPLICATION_CREDENTIALS_JSON not set in environment variables")
+
+# Write Google Cloud credentials to a temporary file
+google_credentials_path = "/tmp/google-credentials.json"
+with open(google_credentials_path, "w") as f:
+    f.write(google_credentials_json)
+
+# Set the GOOGLE_APPLICATION_CREDENTIALS environment variable for Google Cloud SDK
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
+
+# Initialize Firebase
 firebase_storage_bucket = os.getenv('FIREBASE_STORAGE_BUCKET')
 if not firebase_storage_bucket:
     raise ValueError("FIREBASE_STORAGE_BUCKET not set in .env file")
@@ -238,5 +259,4 @@ def process_text():
             os.remove(synthesized_audio_path)
 
 if __name__ == '__main__':
-    port = int(os.getenv("PORT", 5003))  # Use PORT env var, default to 5003 for local dev
-    app.run(host="0.0.0.0", port=port, debug=False)  # Bind to 0.0.0.0 and disable debug for production
+    app.run(debug=True, port=5003)
