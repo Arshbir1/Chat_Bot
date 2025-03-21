@@ -1,8 +1,6 @@
 import os
 import json
 from google.cloud import speech
-from google.cloud.speech import enums
-from google.cloud.speech import types
 from google.oauth2 import service_account
 
 def transcribe_audio(audio_file_path, language="en-US"):
