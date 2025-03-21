@@ -238,4 +238,5 @@ def process_text():
             os.remove(synthesized_audio_path)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5003)
+    port = int(os.getenv("PORT", 5003))  # Use PORT env var, default to 5003 for local dev
+    app.run(host="0.0.0.0", port=port, debug=False)  # Bind to 0.0.0.0 and disable debug for production
