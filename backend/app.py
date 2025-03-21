@@ -78,7 +78,9 @@ def handle_shutdown(signal, frame):
     exit(0)
 
 signal.signal(signal.SIGINT, handle_shutdown)
-
+@app.route('/health')
+def health():
+    return jsonify({"status": "healthy"}), 200
 @app.route('/')
 def index():
     cleanup()
