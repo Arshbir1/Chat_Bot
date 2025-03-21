@@ -282,6 +282,18 @@ from .gemini_api import get_character_response
 app = Flask(__name__)
 
 load_dotenv()
+# Load Google Cloud credentials from environment variable
+google_credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
+if not google_credentials_json:
+    raise ValueError("GOOGLE_CREDENTIALS_JSON not set in environment variables")
+
+# Write the credentials to a temporary file
+google_credentials_path = "/tmp/google_credentials.json"
+with open(google_credentials_path, "w") as f:
+    f.write(google_credentials_json)
+
+# Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
 firebase_credentials_path = os.getenv('FIREBASE_CREDENTIALS')
 if not firebase_credentials_path or not os.path.exists(firebase_credentials_path):
