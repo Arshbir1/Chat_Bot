@@ -9,6 +9,6 @@ google-cloud-speech==2.26.1
 torchaudio==2.2.0
 torch==2.2.0
 numpy==1.26.4
-pyaudio==0.2.14
+sounddevice==0.4.6  # Added
 scipy==1.13.0
 gunicorn==22.0.0
