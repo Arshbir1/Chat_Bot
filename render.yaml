@@ -11,7 +11,8 @@ services:
       chmod +x ffmpeg
       pip install --upgrade pip
       pip install -r requirements.txt
-    startCommand: gunicorn app:app
+      pip list | grep gunicorn
+    startCommand: gunicorn backend.app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.12
