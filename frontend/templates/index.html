@@ -11,12 +11,37 @@
         <div class="chat-header">
             <h1>Chat with Shinchan & Friends</h1>
             <p>Speak or type to chat with your favorite character!</p>
-            <select id="characterSelect">
-                <option value="shinchan">Shinchan</option>
-                <option value="kazama">Kazama</option>
-                <option value="nene">Nene</option>
-                <option value="masao">Masao</option>
-            </select>
+            <div class="selectors">
+                <div class="selector-group">
+                    <label for="characterSelect">Character:</label>
+                    <select id="characterSelect">
+                        <option value="shinchan">Shinchan</option>
+                        <option value="kazama">Kazama</option>
+                        <option value="nene">Nene</option>
+                        <option value="masao">Masao</option>
+                    </select>
+                </div>
+                <div class="selector-group">
+                    <label for="languageSelect">Language:</label>
+                    <select id="languageSelect">
+                        <option value="en-US">English</option>
+                        <option value="hi-IN">Hindi</option>
+                        <option value="ta-IN">Tamil</option>
+                        <option value="kn-IN">Kannada</option>
+                        <option value="te-IN">Telugu</option>
+                        <option value="ml-IN">Malayalam</option>
+                        <option value="bn-IN">Bengali</option>
+                        <option value="mr-IN">Marathi</option>
+                        <option value="gu-IN">Gujarati</option>
+                        <option value="pa-IN">Punjabi</option>
+                        <option value="ur-IN">Urdu</option>
+                        <option value="ja-JP">Japanese</option>
+                        <option value="fr-FR">French</option>
+                        <option value="de-DE">German</option>
+                        <option value="es-ES">Spanish</option>
+                    </select>
+                </div>
+            </div>
         </div>
 
         <div class="chat-messages" id="chatMessages">
