@@ -86,37 +86,54 @@ function addMessage(content, isUser, character = selectedCharacter, audioUrl = n
 
 recordButton.addEventListener('click', async () => {
     recordButton.disabled = true;
-    recordingStatus.textContent = 'Recording...'; // Show message below text box
+    recordingStatus.textContent = 'Recording...';
     recordingStatus.style.display = 'block';
     errorDiv.style.display = 'none';
     const loadingDiv = await showLoading(true);
 
     try {
-        const response = await fetch('/process_audio', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                character: selectedCharacter,
-                language: languageSelect.value 
-            })
-        });
+        // Request microphone access
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        const audioChunks = [];
 
-        const data = await response.json();
+        mediaRecorder.ondataavailable = (event) => audioChunks.push(event.data);
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recorded_audio.wav');
+            formData.append('character', selectedCharacter);
+            formData.append('language', languageSelect.value);
 
-        if (response.ok) {
-            addMessage(data.transcript, true, data.character, data.recorded_audio_url);
-            addMessage(data.response, false, data.character, data.synthesized_audio_url);
-        } else {
-            errorDiv.textContent = data.error || 'An error occurred while processing the audio.';
-            errorDiv.style.display = 'block';
-        }
+            const response = await fetch('/process_audio', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                addMessage(data.transcript, true, data.character, data.recorded_audio_url);
+                addMessage(data.response, false, data.character, data.synthesized_audio_url);
+            } else {
+                errorDiv.textContent = data.error || 'An error occurred while processing the audio.';
+                errorDiv.style.display = 'block';
+            }
+
+            // Stop the stream to release the microphone
+            stream.getTracks().forEach(track => track.stop());
+            removeLoading(loadingDiv);
+            recordButton.disabled = false;
+            recordingStatus.style.display = 'none';
+            recordButton.innerHTML = '<img src="/static/mic_button.png" alt="Record" class="button-icon">';
+        };
+
+        mediaRecorder.start();
+        setTimeout(() => mediaRecorder.stop(), 15000); // Stop after 15 seconds (matches max_duration in app.py)
     } catch (err) {
         errorDiv.textContent = 'An error occurred: ' + err.message;
         errorDiv.style.display = 'block';
-    } finally {
         removeLoading(loadingDiv);
         recordButton.disabled = false;
-        recordingStatus.textContent = ''; // Clear the recording message
         recordingStatus.style.display = 'none';
         recordButton.innerHTML = '<img src="/static/mic_button.png" alt="Record" class="button-icon">';
     }
