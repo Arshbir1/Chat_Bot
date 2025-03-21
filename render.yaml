@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: character-chat
+    env: python
+    preInstallCommand: |
+      apt-get update
+      apt-get install -y portaudio19-dev build-essential
+    buildCommand: |
+      curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | tar xJ
+      mv ffmpeg-*-amd64-static/ffmpeg .
+      chmod +x ffmpeg
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
