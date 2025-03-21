@@ -7,10 +7,9 @@ import json
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
-# from record_audio import record_audio
-from .transcribe_audio import transcribe_audio
-from .tts import text_to_speech, translate_text
-from .gemini_api import get_character_response
+from transcribe_audio import transcribe_audio
+from tts import text_to_speech, translate_text
+from gemini_api import get_character_response
 
 app = Flask(__name__)
 
@@ -217,7 +216,7 @@ def process_text():
         ip_address = request.remote_addr.replace('.', '_')
         data = request.get_json()
         text = data.get('text', '').strip()
-        character = data.get('character')  # No default value here
+        character = data.get('character')
         selected_language = data.get('language', 'en-US')
         
         if not character:
@@ -298,8 +297,6 @@ def clear_chat():
         print(f"Error in clear_chat: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-# Note: Removed the /cleanup route as it was not implemented in the original script.js
-# If you need it for sendBeacon, you can add it back:
 @app.route('/cleanup', methods=['POST'])
 def cleanup():
     try:
@@ -318,6 +315,5 @@ def cleanup():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Use the PORT environment variable set by Render, default to 5003 for local development
     port = int(os.getenv('PORT', 5003))
     app.run(host='0.0.0.0', port=port)
