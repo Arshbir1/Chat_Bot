@@ -5,12 +5,26 @@ from google.cloud import translate_v3 as translate
 import re
 import time
 from pydub import AudioSegment
+import json
+from google.oauth2 import service_account
 
+# Load environment variables
 load_dotenv()
 
-# Initialize Google Cloud TTS client
-client = texttospeech.TextToSpeechClient()
-translate_client = translate.TranslationServiceClient()
+# Load Firebase credentials from environment variable
+firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
+if not firebase_credentials_json:
+    raise ValueError("FIREBASE_CREDENTIALS_JSON not set in environment variables")
+
+try:
+    credentials_info = json.loads(firebase_credentials_json)
+    credentials = service_account.Credentials.from_service_account_info(credentials_info)
+except Exception as e:
+    raise ValueError(f"Failed to parse FIREBASE_CREDENTIALS_JSON: {str(e)}")
+
+# Initialize Google Cloud clients with explicit credentials
+client = texttospeech.TextToSpeechClient(credentials=credentials)
+translate_client = translate.TranslationServiceClient(credentials=credentials)
 
 # Define which voices support SSML - this is a set you'll need to maintain
 # Based on your error message, it appears Chirp3-HD voices might not support SSML
