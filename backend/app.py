@@ -7,9 +7,9 @@ import json
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
-from transcribe_audio import transcribe_audio
-from tts import text_to_speech, translate_text
-from gemini_api import get_character_response
+from .transcribe_audio import transcribe_audio
+from .tts import text_to_speech, translate_text
+from .gemini_api import get_character_response
 
 app = Flask(__name__)
 
