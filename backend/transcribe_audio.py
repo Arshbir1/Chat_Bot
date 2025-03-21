@@ -6,13 +6,26 @@ import contextlib
 import tempfile
 import subprocess
 from dotenv import load_dotenv
+import json
+from google.oauth2 import service_account
 
 # Load environment variables
 load_dotenv()
 
-# Initialize Google Cloud clients
-speech_client = speech.SpeechClient()
-translate_client = translate.Client()
+# Load Firebase credentials from environment variable
+firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
+if not firebase_credentials_json:
+    raise ValueError("FIREBASE_CREDENTIALS_JSON not set in environment variables")
+
+try:
+    credentials_info = json.loads(firebase_credentials_json)
+    credentials = service_account.Credentials.from_service_account_info(credentials_info)
+except Exception as e:
+    raise ValueError(f"Failed to parse FIREBASE_CREDENTIALS_JSON: {str(e)}")
+
+# Initialize Google Cloud clients with explicit credentials
+speech_client = speech.SpeechClient(credentials=credentials)
+translate_client = translate.Client(credentials=credentials)
 
 def transcribe_audio(audio_file, language='en-US', retry_with_enhanced=True, convert_sample_rate=True):
     """
