@@ -4,6 +4,7 @@ const textInput = document.getElementById('textInput');
 const chatMessages = document.getElementById('chatMessages');
 const errorDiv = document.getElementById('error');
 const characterSelect = document.getElementById('characterSelect');
+const languageSelect = document.getElementById('languageSelect');
 
 // Handle speech input
 recordButton.addEventListener('click', async () => {
@@ -15,7 +16,10 @@ recordButton.addEventListener('click', async () => {
         const response = await fetch('/process_audio', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ character: characterSelect.value })
+            body: JSON.stringify({ 
+                character: characterSelect.value,
+                language: languageSelect.value 
+            })
         });
 
         const data = await response.json();
@@ -51,7 +55,11 @@ sendButton.addEventListener('click', async () => {
         const response = await fetch('/process_text', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, character: characterSelect.value })
+            body: JSON.stringify({ 
+                text, 
+                character: characterSelect.value,
+                language: languageSelect.value 
+            })
         });
 
         const data = await response.json();
@@ -73,6 +81,19 @@ sendButton.addEventListener('click', async () => {
 // Allow pressing Enter to send text
 textInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendButton.click();
+});
+
+// Language change notification
+languageSelect.addEventListener('change', () => {
+    const selectedLanguage = languageSelect.options[languageSelect.selectedIndex].text;
+    errorDiv.textContent = `Language changed to ${selectedLanguage}`;
+    errorDiv.style.display = 'block';
+    errorDiv.style.color = 'green';
+    
+    // Hide notification after 3 seconds
+    setTimeout(() => {
+        errorDiv.style.display = 'none';
+    }, 3000);
 });
 
 // Optional: Sync full conversation history from Firebase
