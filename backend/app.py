@@ -1,84 +1,56 @@
 from flask import Flask, render_template, request, jsonify
 import os
 import time
-import atexit  # For shutdown hook
-import signal  # For handling Ctrl+C
+import atexit
+import signal
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 from record_audio import record_audio
 from transcribe_audio import transcribe_audio
-from tts import text_to_speech
+from tts import text_to_speech, translate_text
 from gemini_api import get_character_response
 
 app = Flask(__name__)
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Load Firebase credentials from .env
 firebase_credentials_path = os.getenv('FIREBASE_CREDENTIALS')
-print(f"Firebase credentials path: {firebase_credentials_path}")
-print(f"File exists: {os.path.exists(firebase_credentials_path)}")
-if not firebase_credentials_path:
-    raise ValueError("FIREBASE_CREDENTIALS not set in .env file")
+if not firebase_credentials_path or not os.path.exists(firebase_credentials_path):
+    raise ValueError("FIREBASE_CREDENTIALS not set or file not found in .env file")
 
 firebase_storage_bucket = os.getenv('FIREBASE_STORAGE_BUCKET')
-print(f"Firebase storage bucket: {firebase_storage_bucket}")
 if not firebase_storage_bucket:
     raise ValueError("FIREBASE_STORAGE_BUCKET not set in .env file")
 
-# Initialize Firebase
 cred = credentials.Certificate(firebase_credentials_path)
-firebase_admin.initialize_app(cred, {
-    'storageBucket': firebase_storage_bucket
-})
+firebase_admin.initialize_app(cred, {'storageBucket': firebase_storage_bucket})
 db = firestore.client()
 bucket = storage.bucket()
 
-# Paths for temporary audio files
 UPLOAD_FOLDER = "static/audio"
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# Helper function to clear all documents in the 'conversations' collection
 def clear_firestore():
-    try:
-        print("Clearing Firestore 'conversations' collection...")
-        conversation_ref = db.collection('conversations')
-        docs = conversation_ref.stream()
-        deleted_count = 0
-        for doc in docs:
-            doc.reference.delete()
-            deleted_count += 1
-        print(f"Firestore 'conversations' collection cleared. Deleted {deleted_count} documents.")
-    except Exception as e:
-        print(f"Error clearing Firestore: {str(e)}")
+    print("Clearing Firestore 'conversations' collection...")
+    docs = db.collection('conversations').stream()
+    for doc in docs:
+        doc.reference.delete()
 
-# Helper function to clear all files in the 'audio/' folder in Firebase Storage
 def clear_storage():
-    try:
-        print("Clearing Firebase Storage 'audio/' folder...")
-        blobs = bucket.list_blobs(prefix="audio/")
-        deleted_count = 0
-        for blob in blobs:
-            blob.delete()
-            deleted_count += 1
-        print(f"Firebase Storage 'audio/' folder cleared. Deleted {deleted_count} files.")
-    except Exception as e:
-        print(f"Error clearing Firebase Storage: {str(e)}")
+    print("Clearing Firebase Storage 'audio/' folder...")
+    blobs = bucket.list_blobs(prefix="audio/")
+    for blob in blobs:
+        blob.delete()
 
-# Cleanup function to run on shutdown or when loading the website
 def cleanup():
     print("Cleaning up Firebase data...")
     clear_firestore()
     clear_storage()
-    print("Cleanup completed.")
 
-# Register the cleanup function to run on exit
 atexit.register(cleanup)
 
-# Handle Ctrl+C (SIGINT) gracefully
 def handle_shutdown(signal, frame):
     print("Received SIGINT (Ctrl+C). Performing cleanup...")
     cleanup()
@@ -88,68 +60,76 @@ signal.signal(signal.SIGINT, handle_shutdown)
 
 @app.route('/')
 def index():
-    # Clear Firestore and Storage when the website is loaded
     cleanup()
-
-    # Retrieve conversation history from Firestore (should be empty after cleanup)
     conversation_ref = db.collection('conversations').order_by('timestamp')
-    conversation_docs = conversation_ref.stream()
-    conversation = [doc.to_dict() for doc in conversation_docs]
-    print(f"Loaded {len(conversation)} conversations from Firestore.")
+    conversation = [doc.to_dict() for doc in conversation_ref.stream()]
     return render_template('index.html', conversation=conversation)
 
 @app.route('/process_audio', methods=['POST'])
 def process_audio():
+    recorded_audio_path = None
+    synthesized_audio_path = None
     try:
-        # Get the selected character from the request
         data = request.get_json()
         character = data.get('character', 'shinchan')
+        selected_language = data.get('language', 'en-US')
+        
+        if not selected_language:
+            return jsonify({"error": "No language selected"}), 400
 
-        # Step 1: Record audio with a unique filename
-        print("Starting audio recording...")
-        timestamp = str(time.time_ns())  # Nanosecond precision for uniqueness
-        user_input_id = f"user_input_{timestamp}"  # Unique ID for this QnA pair
+        timestamp = str(time.time_ns())
+        user_input_id = f"user_input_{timestamp}"
         recorded_audio_path = f"{UPLOAD_FOLDER}/recorded_audio_{timestamp}.wav"
-        print(f"Recording audio to: {recorded_audio_path}")
-        record_audio(recorded_audio_path, duration=5)
-
-        # Step 2: Upload recorded audio to Firebase Storage
+        
+        print("Recording audio with voice detection...")
+        recording_successful = record_audio(
+            recorded_audio_path, 
+            max_duration=15,
+            silence_threshold=500,
+            silence_duration=2.0
+        )
+        
+        if not recording_successful:
+            return jsonify({"error": "No speech detected or recording failed"}), 400
+        
         recorded_blob_path = f"audio/recorded_audio_{timestamp}.wav"
-        print(f"Uploading recorded audio to Firebase Storage: {recorded_blob_path}")
         recorded_blob = bucket.blob(recorded_blob_path)
         recorded_blob.upload_from_filename(recorded_audio_path)
         recorded_blob.make_public()
         recorded_audio_url = recorded_blob.public_url
-        print(f"Recorded audio URL: {recorded_audio_url}")
 
-        # Step 3: Transcribe the recorded audio
-        print("Transcribing audio...")
-        transcript, detected_language = transcribe_audio(recorded_audio_path)
-        if transcript is None:
-            return jsonify({"error": "Transcription failed. No speech detected or STT API error."}), 500
+        print(f"Transcribing audio in {selected_language}...")
+        transcript = transcribe_audio(
+            recorded_audio_path,
+            language=selected_language
+        )
+        
+        if not transcript:
+            return jsonify({"error": "Transcription failed or no speech detected"}), 500
 
-        # Step 4: Get character's response
-        print(f"Getting {character}'s response for transcript: {transcript} (Language: {detected_language})")
-        response = get_character_response(transcript, detected_language, character)
-        if "Error" in response or "broke something" in response:
-            return jsonify({"error": f"Failed to get {character}'s response: {response}"}), 500
+        print(f"Transcription successful: '{transcript}'")
 
-        # Step 5: Synthesize response with ElevenLabs TTS
-        print(f"Synthesizing {character}'s response to speech...")
-        synthesized_audio_path = f"{UPLOAD_FOLDER}/synthesized_audio_{timestamp}.mp3"  # ElevenLabs uses MP3
-        print(f"Synthesizing audio to: {synthesized_audio_path}")
-        text_to_speech(response, detected_language, character, synthesized_audio_path)
+        target_language = selected_language.split("-")[0]
+        print(f"Translating transcript from {target_language} to English...")
+        transcript_en = translate_text(transcript, "en")
 
-        # Step 6: Upload synthesized audio to Firebase Storage
+        print(f"Getting {character}'s response in English...")
+        response_en = get_character_response(transcript_en, "en-US", character)
+        if "Error" in response_en:
+            return jsonify({"error": f"Failed to get response: {response_en}"}), 500
+
+        print(f"Translating response to {target_language}...")
+        response = translate_text(response_en, target_language)
+
+        synthesized_audio_path = f"{UPLOAD_FOLDER}/synthesized_audio_{timestamp}.mp3"
+        text_to_speech(response, selected_language, character, synthesized_audio_path)
+
         synthesized_blob_path = f"audio/synthesized_audio_{timestamp}.mp3"
-        print(f"Uploading synthesized audio to Firebase Storage: {synthesized_blob_path}")
         synthesized_blob = bucket.blob(synthesized_blob_path)
         synthesized_blob.upload_from_filename(synthesized_audio_path)
         synthesized_blob.make_public()
         synthesized_audio_url = synthesized_blob.public_url
-        print(f"Synthesized audio URL: {synthesized_audio_url}")
 
-        # Step 7: Store QnA data in Firestore
         conversation_ref = db.collection('conversations')
         conversation_ref.add({
             'user_input_id': user_input_id,
@@ -157,68 +137,73 @@ def process_audio():
             'user_input': transcript,
             'response': response,
             'character': character,
-            'detected_language': detected_language,
+            'selected_language': selected_language,
             'recorded_audio_url': recorded_audio_url,
             'synthesized_audio_url': synthesized_audio_url
         })
 
-        # Step 8: Retrieve updated conversation history
-        conversation_docs = conversation_ref.order_by('timestamp').stream()
-        conversation = [doc.to_dict() for doc in conversation_docs]
-
-        # Clean up local files
-        os.remove(recorded_audio_path)
-        os.remove(synthesized_audio_path)
-
+        conversation = [doc.to_dict() for doc in conversation_ref.order_by('timestamp').stream()]
+        
         return jsonify({
             "transcript": transcript,
             "response": response,
             "character": character,
-            "detected_language": detected_language,
+            "selected_language": selected_language,
             "recorded_audio_url": recorded_audio_url,
             "synthesized_audio_url": synthesized_audio_url,
             "conversation": conversation
         })
     except Exception as e:
-        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+        import traceback
+        print(f"Error in process_audio: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        # Clean up local files even on error
+        if recorded_audio_path and os.path.exists(recorded_audio_path):
+            os.remove(recorded_audio_path)
+        if synthesized_audio_path and os.path.exists(synthesized_audio_path):
+            os.remove(synthesized_audio_path)
 
 @app.route('/process_text', methods=['POST'])
 def process_text():
+    synthesized_audio_path = None
     try:
-        # Get text and character from the request
         data = request.get_json()
         text = data.get('text', '').strip()
         character = data.get('character', 'shinchan')
+        selected_language = data.get('language', 'en-US')
+        
+        if not selected_language:
+            return jsonify({"error": "No language selected"}), 400
         if not text:
-            return jsonify({"error": "No text provided."}), 400
+            return jsonify({"error": "No text provided"}), 400
 
-        # Assume detected_language as 'en' for text input
-        detected_language = 'en'
+        full_language_code = selected_language
+        target_language = selected_language.split("-")[0]
 
-        # Step 1: Get character's response
-        print(f"Getting {character}'s response for text: {text} (Language: {detected_language})")
-        response = get_character_response(text, detected_language, character)
-        if "Error" in response or "broke something" in response:
-            return jsonify({"error": f"Failed to get {character}'s response: {response}"}), 500
+        print(f"Translating input text from {target_language} to English...")
+        text_en = translate_text(text, "en")
 
-        # Step 2: Synthesize response with ElevenLabs TTS
-        print(f"Synthesizing {character}'s response to speech...")
-        timestamp = str(time.time_ns())  # Nanosecond precision for uniqueness
-        user_input_id = f"user_input_{timestamp}"  # Unique ID for this QnA pair
-        synthesized_audio_path = f"{UPLOAD_FOLDER}/synthesized_audio_{timestamp}.mp3"  # ElevenLabs uses MP3
-        print(f"Synthesizing audio to: {synthesized_audio_path}")
-        text_to_speech(response, detected_language, character, synthesized_audio_path)
+        print(f"Getting {character}'s response in English...")
+        response_en = get_character_response(text_en, "en-US", character)
+        if "Error" in response_en:
+            return jsonify({"error": f"Failed to get response: {response_en}"}), 500
 
-        # Step 3: Upload synthesized audio to Firebase Storage
+        print(f"Translating response to {target_language}...")
+        response = translate_text(response_en, target_language)
+
+        timestamp = str(time.time_ns())
+        user_input_id = f"user_input_{timestamp}"
+        synthesized_audio_path = f"{UPLOAD_FOLDER}/synthesized_audio_{timestamp}.mp3"
+        text_to_speech(response, full_language_code, character, synthesized_audio_path)
+
         synthesized_blob_path = f"audio/synthesized_audio_{timestamp}.mp3"
-        print(f"Uploading synthesized audio to Firebase Storage: {synthesized_blob_path}")
         synthesized_blob = bucket.blob(synthesized_blob_path)
         synthesized_blob.upload_from_filename(synthesized_audio_path)
         synthesized_blob.make_public()
         synthesized_audio_url = synthesized_blob.public_url
-        print(f"Synthesized audio URL: {synthesized_audio_url}")
 
-        # Step 4: Store QnA data in Firestore
         conversation_ref = db.collection('conversations')
         conversation_ref.add({
             'user_input_id': user_input_id,
@@ -226,29 +211,31 @@ def process_text():
             'user_input': text,
             'response': response,
             'character': character,
-            'detected_language': detected_language,
-            'recorded_audio_url': None,  # No recorded audio for text input
+            'selected_language': full_language_code,
+            'recorded_audio_url': None,
             'synthesized_audio_url': synthesized_audio_url
         })
 
-        # Step 5: Retrieve updated conversation history
-        conversation_docs = conversation_ref.order_by('timestamp').stream()
-        conversation = [doc.to_dict() for doc in conversation_docs]
-
-        # Clean up local file
-        os.remove(synthesized_audio_path)
-
+        conversation = [doc.to_dict() for doc in conversation_ref.order_by('timestamp').stream()]
+        
         return jsonify({
             "transcript": text,
             "response": response,
             "character": character,
-            "detected_language": detected_language,
+            "selected_language": full_language_code,
             "recorded_audio_url": None,
             "synthesized_audio_url": synthesized_audio_url,
             "conversation": conversation
         })
     except Exception as e:
-        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+        import traceback
+        print(f"Error in process_text: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    finally:
+        # Clean up local file even on error
+        if synthesized_audio_path and os.path.exists(synthesized_audio_path):
+            os.remove(synthesized_audio_path)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5003)
