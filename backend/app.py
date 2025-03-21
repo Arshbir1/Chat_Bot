@@ -126,25 +126,26 @@ def process_audio():
     synthesized_audio_path = None
     try:
         ip_address = request.remote_addr.replace('.', '_')
-        data = request.get_json()
-        character = data.get('character')  # No default value here
-        selected_language = data.get('language', 'en-US')
+        character = request.form.get('character')
+        selected_language = request.form.get('language', 'en-US')
         
         if not character:
             return jsonify({"error": "No character specified"}), 400
         if not selected_language:
             return jsonify({"error": "No language selected"}), 400
 
+        if 'audio' not in request.files:
+            return jsonify({"error": "No audio file provided"}), 400
+
         timestamp = str(time.time_ns())
         user_input_id = f"user_input_{timestamp}"
         recorded_audio_path = f"{UPLOAD_FOLDER}/recorded_audio_{timestamp}.wav"
         
-        print(f"Recording audio to {recorded_audio_path}...")
-        recording_successful = record_audio(recorded_audio_path, max_duration=15, silence_threshold=500, silence_duration=2.0)
-        
-        if not recording_successful:
-            return jsonify({"error": "No speech detected or recording failed"}), 400
-        
+        # Save the uploaded audio file
+        audio_file = request.files['audio']
+        audio_file.save(recorded_audio_path)
+        print(f"Received and saved audio to {recorded_audio_path}")
+
         recorded_blob_path = f"audio/{ip_address}_{character}/recorded_audio_{timestamp}.wav"
         recorded_blob = bucket.blob(recorded_blob_path)
         recorded_blob.upload_from_filename(recorded_audio_path)
