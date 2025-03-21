@@ -3,6 +3,7 @@ import os
 import time
 import atexit
 import signal
+import json
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
@@ -13,17 +14,23 @@ from gemini_api import get_character_response
 
 app = Flask(__name__)
 
+# Load environment variables
 load_dotenv()
 
-firebase_credentials_path = os.getenv('FIREBASE_CREDENTIALS')
-if not firebase_credentials_path or not os.path.exists(firebase_credentials_path):
-    raise ValueError("FIREBASE_CREDENTIALS not set or file not found in .env file")
+# Load Firebase credentials from environment variable
+firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
+if not firebase_credentials_json:
+    raise ValueError("FIREBASE_CREDENTIALS_JSON not set in environment variables")
+
+try:
+    cred = credentials.Certificate(json.loads(firebase_credentials_json))
+except Exception as e:
+    raise ValueError(f"Failed to parse FIREBASE_CREDENTIALS_JSON: {str(e)}")
 
 firebase_storage_bucket = os.getenv('FIREBASE_STORAGE_BUCKET')
 if not firebase_storage_bucket:
-    raise ValueError("FIREBASE_STORAGE_BUCKET not set in .env file")
+    raise ValueError("FIREBASE_STORAGE_BUCKET not set in environment variables")
 
-cred = credentials.Certificate(firebase_credentials_path)
 firebase_admin.initialize_app(cred, {'storageBucket': firebase_storage_bucket})
 db = firestore.client()
 bucket = storage.bucket()
@@ -56,6 +63,7 @@ def cleanup_all():
     for blob in blobs:
         blob.delete()
 
+# Run cleanup on startup
 cleanup_all()
 atexit.register(cleanup_all)
 
@@ -289,5 +297,26 @@ def clear_chat():
         print(f"Error in clear_chat: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+# Note: Removed the /cleanup route as it was not implemented in the original script.js
+# If you need it for sendBeacon, you can add it back:
+@app.route('/cleanup', methods=['POST'])
+def cleanup():
+    try:
+        data = request.get_json()
+        ip_address = data.get('ip_address')
+        character = data.get('character')
+        if not ip_address or not character:
+            return jsonify({"error": "Missing IP address or character"}), 400
+        
+        clear_collection(ip_address, character)
+        clear_storage(ip_address, character)
+        print(f"Cleaned up for IP: {ip_address}, Character: {character}")
+        return jsonify({"message": "Cleanup successful"}), 200
+    except Exception as e:
+        print(f"Error in cleanup: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5003)))
+    # Use the PORT environment variable set by Render, default to 5003 for local development
+    port = int(os.getenv('PORT', 5003))
+    app.run(host='0.0.0.0', port=port)
