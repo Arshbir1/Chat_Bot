@@ -1,11 +1,9 @@
 from flask import Flask, render_template, request, jsonify
-from flask_cors import CORS
 import os
 import time
 import atexit
 import signal
-import json
-from google.oauth2 import service_account
+from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 from record_audio import record_audio
@@ -14,52 +12,18 @@ from tts import text_to_speech, translate_text
 from gemini_api import get_character_response
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes to handle audio playback from Firebase Storage
 
-# Load Google Cloud credentials from environment variable
-google_credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
-if not google_credentials_json:
-    print("ERROR: GOOGLE_CREDENTIALS_JSON environment variable is not set")
-    raise ValueError("GOOGLE_CREDENTIALS_JSON not set in environment variables")
+load_dotenv()
 
-try:
-    # Parse the JSON string into a dictionary
-    credentials_dict = json.loads(google_credentials_json)
-    print("Google Cloud credentials JSON loaded successfully")
-except json.JSONDecodeError as e:
-    print(f"ERROR: GOOGLE_CREDENTIALS_JSON is not a valid JSON string: {str(e)}")
-    raise ValueError(f"GOOGLE_CREDENTIALS_JSON is not a valid JSON string: {str(e)}")
-
-# Create Google Cloud credentials object directly from the dictionary
-google_credentials = service_account.Credentials.from_service_account_info(credentials_dict)
-print("Google Cloud credentials object created successfully")
-
-# Patch the google.auth.default function to use these credentials
-import google.auth
-def patched_default(scopes=None, request=None, quota_project_id=None, default_scopes=None):
-    return google_credentials, quota_project_id or credentials_dict.get('project_id')
-google.auth.default = patched_default
-
-# Load Firebase credentials from environment variable
-firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
-if not firebase_credentials_json:
-    print("ERROR: FIREBASE_CREDENTIALS_JSON environment variable is not set")
-    raise ValueError("FIREBASE_CREDENTIALS_JSON not set in environment variables")
-
-try:
-    firebase_credentials_dict = json.loads(firebase_credentials_json)
-    print("Firebase credentials JSON loaded successfully")
-except json.JSONDecodeError as e:
-    print(f"ERROR: FIREBASE_CREDENTIALS_JSON is not a valid JSON string: {str(e)}")
-    raise ValueError(f"FIREBASE_CREDENTIALS_JSON is not a valid JSON string: {str(e)}")
+firebase_credentials_path = os.getenv('FIREBASE_CREDENTIALS')
+if not firebase_credentials_path or not os.path.exists(firebase_credentials_path):
+    raise ValueError("FIREBASE_CREDENTIALS not set or file not found in .env file")
 
 firebase_storage_bucket = os.getenv('FIREBASE_STORAGE_BUCKET')
 if not firebase_storage_bucket:
-    print("ERROR: FIREBASE_STORAGE_BUCKET not set in environment variables")
-    raise ValueError("FIREBASE_STORAGE_BUCKET not set in environment variables")
+    raise ValueError("FIREBASE_STORAGE_BUCKET not set in .env file")
 
-# Initialize Firebase with the credentials dictionary
-cred = credentials.Certificate(firebase_credentials_dict)
+cred = credentials.Certificate(firebase_credentials_path)
 firebase_admin.initialize_app(cred, {'storageBucket': firebase_storage_bucket})
 db = firestore.client()
 bucket = storage.bucket()
@@ -326,5 +290,4 @@ def clear_chat():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5003))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5003)))

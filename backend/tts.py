@@ -2,10 +2,6 @@ from dotenv import load_dotenv
 import os
 from google.cloud import texttospeech
 from google.cloud import translate_v3 as translate
-import torchaudio
-import torch
-import numpy as np
-import random
 import re
 import time
 from pydub import AudioSegment

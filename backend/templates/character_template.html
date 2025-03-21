@@ -10,7 +10,7 @@
     <div class="chat-container">
         <div class="sidebar">
             <div class="sidebar-header">
-                <h1>Chat Characters</h1>
+                <h1><a href="/" class="sidebar-link">Chat Characters</a></h1>
             </div>
             <div class="sidebar-content">
                 <div class="character-group">
@@ -76,6 +76,7 @@
                 <button id="sendButton"><img src="/static/send_button.png" alt="Send" class="button-icon"></button>
                 <button id="clearChatButton">Clear Chat</button>
             </div>
+            <div id="recordingStatus" class="recording-status"></div>
             <div id="error" style="display: none; color: red;"></div>
         </div>
     </div>
@@ -86,5 +87,5 @@
         const ipAddress = '{{ ip_address }}';
     </script>
     <script src="/static/script.js"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'923dd58a4c58bfc4',t:'MTc0MjU2NDE0My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

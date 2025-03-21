@@ -5,7 +5,6 @@ import wave
 import contextlib
 import tempfile
 import subprocess
-import json
 from dotenv import load_dotenv
 
 # Load environment variables

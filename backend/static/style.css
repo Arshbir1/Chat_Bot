@@ -55,6 +55,16 @@ body {
     animation: gradientShift 4s ease infinite;
 }
 
+.sidebar-link {
+    text-decoration: none;
+    color: inherit;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-link:hover {
+    opacity: 0.8;
+}
+
 .character-group {
     margin-bottom: 20px;
 }
@@ -318,6 +328,14 @@ body {
     box-shadow: 0 0 10px rgba(62, 63, 91, 0.5);
 }
 
+.recording-status {
+    padding: 5px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--primary-color);
+    display: none;
+}
+
 .loading-message {
     text-align: center;
     padding: 10px;
@@ -415,5 +433,9 @@ body {
         flex-direction: column;
         text-align: center;
         padding: 15px;
+    }
+
+    .recording-status {
+        font-size: 12px;
     }
 }
