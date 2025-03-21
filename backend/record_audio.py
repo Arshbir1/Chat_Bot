@@ -1,8 +1,7 @@
-import pyaudio
-import wave
+import sounddevice as sd
 import numpy as np
+import scipy.io.wavfile as wavfile
 import time
-import audioop
 from scipy import signal
 
 def record_audio(filename, max_duration=30, silence_threshold=500, silence_duration=2.0):
@@ -17,14 +16,9 @@ def record_audio(filename, max_duration=30, silence_threshold=500, silence_durat
     """
     # Higher quality audio settings
     CHUNK = 1024
-    FORMAT = pyaudio.paInt16
-    CHANNELS = 1
     RATE = 44100  # Increased from 16000 for better quality
-    
-    p = pyaudio.PyAudio()
-    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, 
-                    input=True, frames_per_buffer=CHUNK)
-    
+    CHANNELS = 1
+
     print("Listening... (speak now)")
     
     # For silence detection
@@ -34,19 +28,21 @@ def record_audio(filename, max_duration=30, silence_threshold=500, silence_durat
     frames = []
     recording_started = False
     start_time = time.time()
-    
+
     try:
         while True:
             # Check if max duration exceeded
             if time.time() - start_time > max_duration:
                 print("Maximum recording duration reached")
                 break
-                
-            data = stream.read(CHUNK, exception_on_overflow=False)
-            frames.append(data)
-            
-            # Calculate audio level
-            rms = audioop.rms(data, 2)
+
+            # Record a small chunk of audio
+            data = sd.rec(int(CHUNK), samplerate=RATE, channels=CHANNELS, dtype='int16')
+            sd.wait()  # Wait until recording is finished
+            frames.append(data.flatten())
+
+            # Calculate RMS for silence detection
+            rms = np.sqrt(np.mean(data**2))
             
             # Voice activity detection
             if not recording_started and rms > silence_threshold:
@@ -65,24 +61,20 @@ def record_audio(filename, max_duration=30, silence_threshold=500, silence_durat
     except KeyboardInterrupt:
         print("Recording stopped manually")
     finally:
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
-    
+        pass
+
     if not recording_started or len(frames) < RATE // CHUNK:  # Less than 1 second of audio
         print("No speech detected, recording cancelled")
         return False
+
+    # Concatenate frames
+    audio_data = np.concatenate(frames)
     
     # Apply preprocessing to improve audio quality
-    audio_data = preprocess_audio(b''.join(frames), RATE, p.get_sample_size(FORMAT))
+    audio_data = preprocess_audio(audio_data.tobytes(), RATE, 2)  # 2 bytes per sample for int16
     
     # Save the processed audio
-    wf = wave.open(filename, 'wb')
-    wf.setnchannels(CHANNELS)
-    wf.setsampwidth(p.get_sample_size(FORMAT))
-    wf.setframerate(RATE)
-    wf.writeframes(audio_data)
-    wf.close()
+    wavfile.write(filename, RATE, np.frombuffer(audio_data, dtype=np.int16))
     
     print(f"Recording finished and saved to {filename}")
     return True
